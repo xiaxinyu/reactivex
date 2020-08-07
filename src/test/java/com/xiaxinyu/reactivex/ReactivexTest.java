@@ -31,29 +31,37 @@ public class ReactivexTest {
 
     @Test
     public void test() throws InterruptedException {
-        Record record = Record.builder().maxRetryCount(3).build();
+        Record record = Record.builder().maxRetryCount(1).build();
 
-        Observable.just(record)
-                .map(t -> {
-                    doSendAndUpdateRecord(record);
-                    return t;
-                })
-                .retryWhen(x -> x.zipWith(
-                        Observable.range(1, 3),
-                        (e, retryCount) -> {
-                            log.info("重新发送邮件： retryCount={}, businessType={}, templateId={}, receiveAccount={}",
-                                    retryCount, record.getBusinessType(), record.getTemplateId(), record.getReceiveAccount());
+        Integer maxRetryCount = record.getMaxRetryCount();
+        Integer factRetryCount = maxRetryCount - 1;
 
-                            if (retryCount >= record.getMaxRetryCount()) {
-                                log.warn("error.emailSend.retrySendError {}", e);
-                            }
-                            return retryCount;
-                        }).flatMap(y -> Observable.timer(1, TimeUnit.SECONDS)))
-                .subscribeOn(Schedulers.from(executor))
-                .subscribe((Record rc) -> {
-                });
+        if (maxRetryCount == 1) {
+            doSendAndUpdateRecord(record);
+        } else {
+            Observable.just(record)
+                    .map(t -> {
+                        doSendAndUpdateRecord(record);
+                        return t;
+                    })
+                    .retryWhen(x -> x.zipWith(
+                            Observable.range(1, factRetryCount),
+                            (e, retryCount) -> {
+                                log.info("重新发送邮件： retryCount={}, businessType={}, templateId={}, receiveAccount={}",
+                                        retryCount, record.getBusinessType(), record.getTemplateId(), record.getReceiveAccount());
 
-        Thread.sleep(20000);
+                                if (retryCount >= factRetryCount) {
+                                    log.warn("error.emailSend.retrySendError {}", e);
+                                }
+                                return retryCount + 1;
+                            }).flatMap(y -> Observable.timer(1, TimeUnit.SECONDS)))
+                    .subscribeOn(Schedulers.from(executor))
+                    .subscribe((Record rc) -> {
+                    });
+        }
+
+
+        Thread.sleep(5000);
     }
 
     @Test
